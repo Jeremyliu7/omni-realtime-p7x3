@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+DEFAULT_VOICE = "qwen-omni-vc-mm-voice-20260522161248001-f213"
+
 # 重连配置
 MAX_RECONNECT_ATTEMPTS = 5
 INITIAL_RECONNECT_DELAY = 1.0  # 秒
@@ -82,7 +84,7 @@ async def create_and_connect_client(
     client = OmniRealtimeClient(
         base_url="wss://dashscope.aliyuncs.com/api-ws/v1/realtime",
         api_key=api_key,
-        model="qwen3-omni-flash-realtime-2025-12-01",
+        model="qwen3.5-omni-plus-realtime",
         voice=voice,
         on_audio_delta=lambda d: asyncio.create_task(on_audio_callback(d)),
         on_interrupt=lambda: asyncio.create_task(on_interrupt_callback()),
@@ -92,6 +94,8 @@ async def create_and_connect_client(
     )
     
     await client.connect()
+    # 明确创建一次响应，确保模型按照新的人设指令开始工作
+    await client.create_response()
     logger.info(f"OmniRealtimeClient连接成功, 使用音色: {voice}")
     return client
 
@@ -134,7 +138,7 @@ async def get():
         return HTMLResponse("<h1>服务器错误</h1>", status_code=500)
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, voice: str = "Ethan"):
+async def websocket_endpoint(websocket: WebSocket, voice: str = DEFAULT_VOICE):
     await websocket.accept()
     logger.info(f"WebSocket连接已建立, 音色: {voice}")
     

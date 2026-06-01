@@ -594,6 +594,8 @@
         <label for="voice-select">音色:</label>
         <select id="voice-select">
             <!-- 新增及更新音色列表 -->
+            <option value="qwen-omni-vc-mm-voice-20260522161248001-f213">mm</option>
+            <option value="qwen-omni-vc-yy-voice-20260522143129443-f3c4">yy</option>
             <option value="Cherry">芊悦 (Cherry)</option>
             <option value="Ethan">晨煦 (Ethan)</option>
             <option value="Nofish">不吃鱼 (Nofish)</option>
@@ -648,7 +650,7 @@
                     <line x1="8" y1="23" x2="16" y2="23"></line>
                 </svg>
             </button>
-            <button id="camera-btn" class="control-btn active" title="摄像头开关">
+            <button id="camera-btn" class="control-btn muted" title="摄像头关闭">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M23 7l-7 5 7 5V7z"></path>
                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
@@ -714,6 +716,14 @@
                 background: '#f48fb1', border: '#f06292',
                 active_bg: 'rgba(244, 143, 177, 0.2)', active_border: '#f48fb1', active_shadow: 'rgba(244, 143, 177, 0.3)'
             },
+            'qwen-omni-vc-mm-voice-20260522161248001-f213': {
+                background: '#ffb74d', border: '#fb8c00',
+                active_bg: 'rgba(255, 183, 77, 0.2)', active_border: '#ffb74d', active_shadow: 'rgba(255, 167, 38, 0.3)'
+            },
+            'qwen-omni-vc-yy-voice-20260522143129443-f3c4': {
+                background: '#81d4fa', border: '#4fc3f7',
+                active_bg: 'rgba(129, 212, 250, 0.2)', active_border: '#81d4fa', active_shadow: 'rgba(129, 212, 250, 0.3)'
+            },
             'Dylan': {
                 background: '#90caf9', border: '#64b5f6',
                 active_bg: 'rgba(144, 202, 249, 0.2)', active_border: '#90caf9', active_shadow: 'rgba(144, 202, 249, 0.3)'
@@ -761,11 +771,12 @@
         let isInterrupted = false;
         let animationId;
         let isMicEnabled = true;
-        let isCameraEnabled = true;
+        let isCameraEnabled = false;
         let isConnected = false;
         let timerInterval;
-        let timeLeft = 180; // 3分钟
-        let currentVoice = localStorage.getItem('voice') || 'Ethan';
+        let timeLeft = 600; // 10分钟
+        const DEFAULT_VOICE = 'qwen-omni-vc-mm-voice-20260522161248001-f213';
+        let currentVoice = localStorage.getItem('voice') || DEFAULT_VOICE;
         let userMessageAdded = false; // 添加标志变量，跟踪用户消息是否已添加
         // 用于暂存 assistant 文本，待语音播放完后再显示
         let pendingAssistantMessages = [];
@@ -813,7 +824,7 @@
         // 启动计时器
         function startTimer() {
             timerDisplay.style.display = 'block';
-            timeLeft = 180;
+            timeLeft = 600;
 
             if (timerInterval) {
                 clearInterval(timerInterval);
@@ -1355,7 +1366,15 @@
             
             // 初始化音频录制
             const audioInitialized = await initAudioRecording();
-            await initVideo();
+            if (isCameraEnabled) {
+                await initVideo();
+            }
+            
+            if (!isCameraEnabled) {
+                cameraBtn.classList.remove('active');
+                cameraBtn.classList.add('muted');
+                cameraBtn.title = '摄像头关闭';
+            }
             
             if (!audioInitialized) {
                 isMicEnabled = false;
