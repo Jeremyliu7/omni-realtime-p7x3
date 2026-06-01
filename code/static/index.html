@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>实时视频通话</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            color: #333;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 40px;
+            padding: 40px;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .voice-indicator {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .voice-orb {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: #87CEEB;
+            border: 0.01px solid #5DADE2;
+            position: relative;
+            transition: transform 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 20px rgba(135, 206, 235, 0.3);
+            overflow: hidden;
+        }
+
+        .voice-orb::before {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            width: calc(100% + 20px);
+            height: calc(100% + 20px);
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(135, 206, 235, 0.3) 0%, rgba(135, 206, 235, 0.1) 50%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .voice-orb::after {
+            content: '';
+            position: absolute;
+            top: -20px;
+            left: -20px;
+            width: calc(100% + 40px);
+            height: calc(100% + 40px);
+            border-radius: 50%;
+            border: 2px solid rgba(135, 206, 235, 0.4);
+            opacity: 0;
+            transform: scale(0.8);
+            transition: all 0.3s ease;
+        }
+
+        /* 用户说话时的呼吸效果 */
+        .voice-orb.listening {
+            animation: breathe 2s ease-in-out infinite;
+        }
+
+        .voice-orb.listening::before {
+            opacity: 1;
+            animation: breatheGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes breathe {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        @keyframes breatheGlow {
+            0%, 100% {
+                opacity: 0.3;
+            }
+            50% {
+                opacity: 0.6;
+            }
+        }
+
+        /* 模型说话时的脉冲效果 */
+        .voice-orb.speaking {
+            animation: speakingPulse 2.4s ease-in-out infinite;
+        }
+
+        .voice-orb.speaking::before {
+            opacity: 1;
+            animation: speakingGlow 2.4s ease-in-out infinite;
+        }
+
+        .voice-orb.speaking::after {
+            opacity: 1;
+            transform: scale(1);
+            animation: speakingRipple 1.2s ease-out infinite;
+        }
+
+        @keyframes speakingPulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 4px 20px rgba(135, 206, 235, 0.3);
+            }
+            50% {
+                transform: scale(1.08);
+                box-shadow: 0 8px 30px rgba(135, 206, 235, 0.5);
+            }
+        }
+
+        @keyframes speakingGlow {
+            0%, 100% {
+                opacity: 0.4;
+            }
+            50% {
+                opacity: 0.8;
+            }
+        }
+
+        @keyframes speakingRipple {
+            0% {
+                transform: scale(0.8);
+                opacity: 0.8;
+            }
+            100% {
+                transform: scale(1.3);
+                opacity: 0;
+            }
+        }
+
+        /* 静音状态 */
+        .voice-orb.muted {
+            background: #636e72;
+            border-color: #2d3436;
+            animation: none;
+            box-shadow: 0 4px 20px rgba(99, 110, 114, 0.3);
+        }
+
+        .voice-orb.muted::before {
+            opacity: 0;
+        }
+
+        .voice-orb.muted::after {
+            opacity: 0;
+        }
+
+        /* 音频活跃时的额外效果 */
+        .voice-orb.audio-active {
+            animation: audioActive 1.2s ease-out;
+        }
+
+        @keyframes audioActive {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.1);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        /* 准备说话时的预备效果 */
+        .voice-orb.preparing-speak {
+            animation: preparingSpeak 1.6s ease-in-out;
+        }
+
+        @keyframes preparingSpeak {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(0.95);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .cloud-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .cloud {
+            position: absolute;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.4) 20%, transparent 60%);
+            border-radius: 50%;
+            filter: blur(15px);
+            opacity: 0.8;
+        }
+
+        .cloud.c1 {
+            width: 180px;
+            height: 180px;
+            top: -20%;
+            left: -30%;
+            animation: moveCloud1 25s linear infinite;
+        }
+
+        .cloud.c2 {
+            width: 220px;
+            height: 220px;
+            bottom: -30%;
+            right: -40%;
+            animation: moveCloud2 30s linear infinite -10s;
+        }
+
+        .cloud.c3 {
+            width: 150px;
+            height: 150px;
+            top: 30%;
+            right: -25%;
+            animation: moveCloud2 35s linear infinite -5s;
+        }
+
+        @keyframes moveCloud1 {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(20px, 40px); }
+            50% { transform: translate(-30px, 10px); }
+            75% { transform: translate(10px, -20px); }
+            100% { transform: translate(0, 0); }
+        }
+
+        @keyframes moveCloud2 {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(-20px, -40px); }
+            50% { transform: translate(30px, -10px); }
+            75% { transform: translate(-10px, 20px); }
+            100% { transform: translate(0, 0); }
+        }
+
+        @keyframes subtleSheen {
+            0% {
+                background-position: 0% 0%;
+            }
+            100% {
+                background-position: 100% 100%;
+            }
+        }
+
+        @keyframes audioResponse {
+            0%, 100% {
+                transform: scale(0.9);
+            }
+            50% {
+                transform: scale(0.95);
+            }
+        }
+
+        .audio-waves {
+            display: none;
+        }
+
+        .wave {
+            display: none;
+        }
+
+        @keyframes wave {
+            0% {
+                width: 200px;
+                height: 200px;
+                opacity: 1;
+            }
+            100% {
+                width: 350px;
+                height: 350px;
+                opacity: 0;
+            }
+        }
+
+        .controls {
+            display: flex;
+            gap: 40px;
+            align-items: center;
+        }
+
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border: 2px solid #333;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+
+        .control-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .control-btn:active {
+            transform: translateY(0);
+        }
+
+        .control-btn.active {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: #333;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .control-btn.muted {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: #333;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+
+        .control-btn.muted::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 40px;
+            height: 2px;
+            background: #333;
+            transform: translate(-50%, -50%) rotate(45deg);
+            z-index: 1;
+        }
+
+        .control-btn.danger {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: #333;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .control-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .status-indicator {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            font-weight: 500;
+            color: #6c757d;
+            background: rgba(248, 249, 250, 0.4);
+            padding: 8px 16px;
+            border-radius: 20px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(233, 236, 239, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .status-indicator.active {
+            /* 使用默认颜色 */
+        }
+
+        .status-indicator.error {
+            /* 使用默认颜色 */
+        }
+
+        /* 计时器显示样式 */
+        .timer-display {
+            font-size: 16px;
+            font-weight: 600;
+            color: #495057;
+            background: rgba(248, 249, 250, 0.3);
+            padding: 12px 24px;
+            border-radius: 25px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            text-align: center;
+            min-width: 140px;
+            transition: all 0.3s ease;
+        }
+
+        .timer-display.warning {
+            color: #d63384;
+            background: rgba(214, 51, 132, 0.1);
+            border-color: rgba(214, 51, 132, 0.2);
+        }
+
+        #video-container {
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            width: 240px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            cursor: move;
+            z-index: 1000;
+        }
+
+        #localVideo {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 480px) {
+            .container {
+                gap: 30px;
+                padding: 20px;
+            }
+            
+            .voice-indicator {
+                width: 250px;
+                height: 250px;
+            }
+            
+            .voice-orb {
+                width: 150px;
+                height: 150px;
+            }
+            
+            .controls {
+                gap: 30px;
+            }
+            
+            .control-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 20px;
+            }
+        }
+
+        .control-btn svg {
+            width: 28px;
+            height: 28px;
+            stroke-width: 1.5;
+        }
+
+        .history-container {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 300px;
+            height: 70vh;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 20px;
+            background: rgba(248, 249, 250, 0.3);
+            backdrop-filter: blur(15px);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .history-messages {
+            overflow-y: auto;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .history-messages::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .history-messages::-webkit-scrollbar-thumb {
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 2px;
+        }
+
+        .message {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message-role {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 5px;
+            color: #495057;
+        }
+
+        .message-content {
+            padding: 10px 15px;
+            border-radius: 12px;
+            line-height: 1.5;
+            word-wrap: break-word;
+            font-size: 14px;
+        }
+
+        .message.user .message-content {
+            background-color: rgba(255, 255, 255, 0.4);
+            align-self: flex-start;
+        }
+
+        .message.assistant .message-content {
+            background-color: rgba(200, 220, 255, 0.5);
+            align-self: flex-start;
+        }
+
+        .voice-selector {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(248, 249, 250, 0.3);
+            padding: 8px 16px;
+            border-radius: 20px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            font-size: 14px;
+            font-weight: 500;
+            color: #495057;
+            transition: all 0.3s ease;
+        }
+
+        .voice-selector label {
+            /* Styles inherited from .voice-selector */
+        }
+
+        .voice-selector select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background: transparent;
+            border: none;
+            font-family: inherit;
+            font-size: inherit;
+            font-weight: inherit;
+            color: #333;
+            cursor: pointer;
+            padding: 0 5px;
+        }
+
+        .voice-selector select:focus {
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="history-container" class="history-container" style="display: none;">
+        <div id="history-messages" class="history-messages"></div>
+    </div>
+    <div class="voice-selector">
+        <label for="voice-select">音色:</label>
+        <select id="voice-select">
+            <!-- 新增及更新音色列表 -->
+            <option value="Cherry">芊悦 (Cherry)</option>
+            <option value="Ethan">晨煦 (Ethan)</option>
+            <option value="Nofish">不吃鱼 (Nofish)</option>
+            <option value="Jennifer">詹妮弗 (Jennifer)</option>
+            <option value="Ryan">甜茶 (Ryan)</option>
+            <option value="Katerina">卡捷琳娜 (Katerina)</option>
+            <option value="Elias">墨讲师 (Elias)</option>
+            <option value="Jada">上海-阿珍 (Jada)</option>
+            <option value="Dylan">北京-晓东 (Dylan)</option>
+            <option value="Sunny">四川-晴儿 (Sunny)</option>
+            <option value="Li">南京-老李 (li)</option>
+            <option value="Marcus">陕西-秦川 (Marcus)</option>
+            <option value="Roy">闽南-阿杰 (Roy)</option>
+            <option value="Peter">天津-李彼得 (Peter)</option>
+            <option value="Rocky">粤语-阿强 (Rocky)</option>
+            <option value="Kiki">粤语-阿清 (Kiki)</option>
+            <option value="Eric">四川-程川 (Eric)</option>
+            <!-- 已移除不再支持的 Chelsie、Serena 音色 -->
+        </select>
+    </div>
+    <div class="status-indicator" id="status-indicator">正在初始化...</div>
+
+    <div id="video-container" style="display: none;">
+        <video id="localVideo" autoplay muted playsinline></video>
+    </div>
+    <canvas id="videoCanvas" style="display:none;"></canvas>
+
+    <div class="container">
+        <div class="voice-indicator">
+            <div id="voice-orb" class="voice-orb">
+                <div class="cloud-container">
+                    <div class="cloud c1"></div>
+                    <div class="cloud c2"></div>
+                    <div class="cloud c3"></div>
+                </div>
+                <div class="audio-waves">
+                    <div class="wave"></div>
+                    <div class="wave" style="animation-delay: 0.5s;"></div>
+                    <div class="wave" style="animation-delay: 1s;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="timer-display" class="timer-display" style="display: none;"></div>
+
+        <div class="controls">
+            <button id="mic-btn" class="control-btn active" title="麦克风开关">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+            </button>
+            <button id="camera-btn" class="control-btn active" title="摄像头开关">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 7l-7 5 7 5V7z"></path>
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                </svg>
+            </button>
+            <button id="reconnect-btn" class="control-btn" title="重新连接" style="display: none;">
+                🔄
+            </button>
+            <button id="stop-btn" class="control-btn danger" title="结束通话">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const voiceOrb = document.getElementById("voice-orb");
+        const micBtn = document.getElementById("mic-btn");
+        const reconnectBtn = document.getElementById("reconnect-btn");
+        const stopBtn = document.getElementById("stop-btn");
+        const statusIndicator = document.getElementById("status-indicator");
+        const timerDisplay = document.getElementById("timer-display");
+        const voiceSelect = document.getElementById("voice-select");
+        const localVideo = document.getElementById('localVideo');
+        const videoContainer = document.getElementById('video-container');
+        const videoCanvas = document.getElementById('videoCanvas');
+        const cameraBtn = document.getElementById('camera-btn');
+        const historyContainer = document.getElementById('history-container');
+        const historyMessages = document.getElementById('history-messages');
+
+        const voiceColors = {
+            'Ethan': {
+                background: '#87CEEB', border: '#5DADE2',
+                active_bg: 'rgba(135, 206, 235, 0.2)', active_border: '#87CEEB', active_shadow: 'rgba(135, 206, 235, 0.3)'
+            },
+            'Cherry': {
+                background: '#ffb3ba', border: '#ff8f9a',
+                active_bg: 'rgba(255, 179, 186, 0.2)', active_border: '#ffb3ba', active_shadow: 'rgba(255, 179, 186, 0.3)'
+            },
+            'Nofish': {
+                background: '#ffe5b4', border: '#ffc285',
+                active_bg: 'rgba(255, 229, 180, 0.2)', active_border: '#ffe5b4', active_shadow: 'rgba(255, 229, 180, 0.3)'
+            },
+            'Jennifer': {
+                background: '#c5e1a5', border: '#aed581',
+                active_bg: 'rgba(197, 225, 165, 0.2)', active_border: '#c5e1a5', active_shadow: 'rgba(197, 225, 165, 0.3)'
+            },
+            'Ryan': {
+                background: '#b39ddb', border: '#9575cd',
+                active_bg: 'rgba(179, 157, 219, 0.2)', active_border: '#b39ddb', active_shadow: 'rgba(179, 157, 219, 0.3)'
+            },
+            'Katerina': {
+                background: '#80cbc4', border: '#4db6ac',
+                active_bg: 'rgba(128, 203, 196, 0.2)', active_border: '#80cbc4', active_shadow: 'rgba(128, 203, 196, 0.3)'
+            },
+            'Elias': {
+                background: '#ffccbc', border: '#ffab91',
+                active_bg: 'rgba(255, 204, 188, 0.2)', active_border: '#ffccbc', active_shadow: 'rgba(255, 204, 188, 0.3)'
+            },
+            'Jada': {
+                background: '#f48fb1', border: '#f06292',
+                active_bg: 'rgba(244, 143, 177, 0.2)', active_border: '#f48fb1', active_shadow: 'rgba(244, 143, 177, 0.3)'
+            },
+            'Dylan': {
+                background: '#90caf9', border: '#64b5f6',
+                active_bg: 'rgba(144, 202, 249, 0.2)', active_border: '#90caf9', active_shadow: 'rgba(144, 202, 249, 0.3)'
+            },
+            'Sunny': {
+                background: '#fff59d', border: '#fff176',
+                active_bg: 'rgba(255, 245, 157, 0.2)', active_border: '#fff59d', active_shadow: 'rgba(255, 245, 157, 0.3)'
+            },
+            'li': {
+                background: '#bcaaa4', border: '#a1887f',
+                active_bg: 'rgba(188, 170, 164, 0.2)', active_border: '#bcaaa4', active_shadow: 'rgba(188, 170, 164, 0.3)'
+            },
+            'Marcus': {
+                background: '#a5d6a7', border: '#81c784',
+                active_bg: 'rgba(165, 214, 167, 0.2)', active_border: '#a5d6a7', active_shadow: 'rgba(165, 214, 167, 0.3)'
+            },
+            'Roy': {
+                background: '#ffab91', border: '#ff8a65',
+                active_bg: 'rgba(255, 171, 145, 0.2)', active_border: '#ffab91', active_shadow: 'rgba(255, 171, 145, 0.3)'
+            },
+            'Peter': {
+                background: '#ce93d8', border: '#ba68c8',
+                active_bg: 'rgba(206, 147, 216, 0.2)', active_border: '#ce93d8', active_shadow: 'rgba(206, 147, 216, 0.3)'
+            },
+            'Rocky': {
+                background: '#4db6ac', border: '#26a69a',
+                active_bg: 'rgba(77, 182, 172, 0.2)', active_border: '#4db6ac', active_shadow: 'rgba(77, 182, 172, 0.3)'
+            },
+            'Kiki': {
+                background: '#ffe082', border: '#ffd54f',
+                active_bg: 'rgba(255, 224, 130, 0.2)', active_border: '#ffe082', active_shadow: 'rgba(255, 224, 130, 0.3)'
+            },
+            'Eric': {
+                background: '#ffcc80', border: '#ffb74d',
+                active_bg: 'rgba(255, 204, 128, 0.2)', active_border: '#ffcc80', active_shadow: 'rgba(255, 204, 128, 0.3)'
+            },
+            // 已移除不再支持的 Chelsie、Serena 颜色配置
+        };
+
+        let socket, audioContext, mediaStream, processor, analyser, dataArray, localVideoStream, videoInterval;
+        
+        // 音频播放队列和状态管理
+        let audioQueue = [];
+        let isPlaying = false;
+        let isInterrupted = false;
+        let animationId;
+        let isMicEnabled = true;
+        let isCameraEnabled = true;
+        let isConnected = false;
+        let timerInterval;
+        let timeLeft = 180; // 3分钟
+        let currentVoice = localStorage.getItem('voice') || 'Ethan';
+        let userMessageAdded = false; // 添加标志变量，跟踪用户消息是否已添加
+        // 用于暂存 assistant 文本，待语音播放完后再显示
+        let pendingAssistantMessages = [];
+
+        // 更新状态指示器
+        function updateStatus(message, type = 'normal') {
+            statusIndicator.textContent = message;
+            statusIndicator.className = 'status-indicator';
+            if (type === 'active') {
+                statusIndicator.classList.add('active');
+            } else if (type === 'error') {
+                statusIndicator.classList.add('error');
+            }
+        }
+
+        // 显示对话历史
+        function showHistory() {
+            if (historyMessages.children.length > 0) {
+                historyContainer.style.display = 'flex';
+            }
+        }
+
+        // 添加消息到历史记录
+        function addMessageToHistory(role, text) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message', role);
+
+            const roleElement = document.createElement('div');
+            roleElement.classList.add('message-role');
+            roleElement.textContent = role === 'user' ? '你' : 'AI 助手';
+
+            const contentElement = document.createElement('div');
+            contentElement.classList.add('message-content');
+            contentElement.textContent = text;
+            
+            messageElement.appendChild(roleElement);
+            messageElement.appendChild(contentElement);
+            historyMessages.appendChild(messageElement);
+
+            // 滚动到底部
+            historyMessages.scrollTop = historyMessages.scrollHeight;
+            showHistory();
+        }
+
+        // 启动计时器
+        function startTimer() {
+            timerDisplay.style.display = 'block';
+            timeLeft = 180;
+
+            if (timerInterval) {
+                clearInterval(timerInterval);
+            }
+
+            const updateTimer = () => {
+                const minutes = Math.floor(timeLeft / 60);
+                const seconds = timeLeft % 60;
+                timerDisplay.textContent = `剩余时间: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                
+                // 当时间不足30秒时显示警告样式
+                if (timeLeft <= 30) {
+                    timerDisplay.classList.add('warning');
+                } else {
+                    timerDisplay.classList.remove('warning');
+                }
+            };
+
+            updateTimer(); // 立即更新一次显示
+
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                updateTimer();
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    updateStatus("时间到，正在重新连接...", "active");
+                    resetConnection(false); // 时间到，不需要延迟
+                }
+            }, 1000);
+        }
+
+        function resetConnection(withDelay = true) {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+            }
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+            if (processor) { 
+                processor.disconnect(); 
+                processor = null; 
+            }
+            if (mediaStream) { 
+                mediaStream.getTracks().forEach(t => t.stop()); 
+            }
+            if (socket) { 
+                socket.close(); 
+            }
+            if (localVideoStream) {
+                localVideoStream.getTracks().forEach(track => track.stop());
+                localVideoStream = null;
+            }
+            if (videoInterval) {
+                clearInterval(videoInterval);
+                videoInterval = null;
+            }
+            
+            clearAudioQueue();
+            voiceOrb.classList.remove("listening", "speaking", "muted");
+            timerDisplay.classList.remove("warning");
+            timerDisplay.style.display = 'none';
+            updateStatus("通话已结束");
+            
+            const reload = () => location.reload();
+
+            if (withDelay) {
+                setTimeout(reload, 2000);
+            } else {
+                reload();
+            }
+        }
+
+        // 应用主题颜色
+        function applyTheme(voice) {
+            const colors = voiceColors[voice];
+            if (!colors) return;
+
+            voiceOrb.style.background = colors.background;
+            voiceOrb.style.borderColor = colors.border;
+            
+            const styleSheet = document.createElement("style");
+            styleSheet.innerText = `
+                .voice-orb {
+                    box-shadow: 0 4px 20px ${colors.active_shadow};
+                }
+                .voice-orb::before {
+                    background: radial-gradient(circle, ${colors.active_shadow} 0%, rgba(${getRGBValues(colors.background)}, 0.1) 50%, transparent 70%);
+                }
+                .voice-orb::after {
+                    border-color: ${colors.active_border};
+                }
+                .voice-orb.listening::before {
+                    background: radial-gradient(circle, ${colors.active_shadow} 0%, rgba(${getRGBValues(colors.background)}, 0.1) 50%, transparent 70%);
+                }
+                .voice-orb.speaking::after {
+                    border-color: ${colors.active_border};
+                }
+                @keyframes speakingPulse {
+                    0%, 100% {
+                        transform: scale(1);
+                        box-shadow: 0 4px 20px ${colors.active_shadow};
+                    }
+                    50% {
+                        transform: scale(1.08);
+                        box-shadow: 0 8px 30px ${colors.active_shadow};
+                    }
+                }
+                .control-btn.active {
+                    background: rgba(255, 255, 255, 0.1);
+                    border-color: #333;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                }
+                .status-indicator.active {
+                    /* 使用默认颜色 */
+                }
+            `;
+            document.head.appendChild(styleSheet);
+        }
+
+        // 辅助函数：从颜色值中提取RGB值
+        function getRGBValues(color) {
+            if (color.startsWith('#')) {
+                const hex = color.slice(1);
+                const r = parseInt(hex.substr(0, 2), 16);
+                const g = parseInt(hex.substr(2, 2), 16);
+                const b = parseInt(hex.substr(4, 2), 16);
+                return `${r}, ${g}, ${b}`;
+            } else if (color.startsWith('rgb')) {
+                // 处理rgb(r, g, b)格式
+                const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                if (match) {
+                    return `${match[1]}, ${match[2]}, ${match[3]}`;
+                }
+            }
+            return '135, 206, 235'; // 默认蓝色
+        }
+
+        // 音频可视化 - 检测音频输入强度
+        function analyzeAudio() {
+            if (!analyser || !isMicEnabled) return;
+            
+            analyser.getByteFrequencyData(dataArray);
+            
+            // 计算音频强度
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                sum += dataArray[i];
+            }
+            const average = sum / dataArray.length;
+            
+            // 如果音频强度超过阈值，触发音频活跃动画
+            if (average > 15) { // 提高阈值以减少误触发
+                voiceOrb.classList.add('audio-active');
+                setTimeout(() => {
+                    voiceOrb.classList.remove('audio-active');
+                }, 1200); // 动画结束后移除class
+            }
+            
+            if (mediaStream && mediaStream.active) {
+                animationId = requestAnimationFrame(analyzeAudio);
+            }
+        }
+
+        // 切换麦克风状态
+        function toggleMicrophone() {
+            isMicEnabled = !isMicEnabled;
+            
+            if (isMicEnabled) {
+                micBtn.classList.add('active');
+                micBtn.classList.remove('muted');
+                micBtn.title = '麦克风开启';
+                
+                // 清除所有状态类，然后添加listening状态
+                voiceOrb.classList.remove('muted', 'speaking', 'preparing-speak');
+                voiceOrb.classList.add('listening');
+                updateStatus("正在聆听...", 'active');
+                
+                // 重新开始音频分析
+                if (mediaStream && mediaStream.active) {
+                    analyzeAudio();
+                }
+            } else {
+                micBtn.classList.remove('active');
+                micBtn.classList.add('muted');
+                micBtn.title = '麦克风关闭';
+                
+                // 清除所有状态类，然后添加muted状态
+                voiceOrb.classList.remove('listening', 'speaking', 'preparing-speak', 'audio-active');
+                voiceOrb.classList.add('muted');
+                updateStatus("麦克风已关闭");
+                
+                // 停止音频分析
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                }
+            }
+        }
+
+        // 切换摄像头状态
+        async function toggleCamera() {
+            isCameraEnabled = !isCameraEnabled;
+
+            if (isCameraEnabled) {
+                await initVideo();
+            } else {
+                cameraBtn.classList.remove('active');
+                cameraBtn.classList.add('muted');
+                cameraBtn.title = '摄像头关闭';
+
+                if (localVideoStream) {
+                    localVideoStream.getTracks().forEach(track => track.stop());
+                    localVideoStream = null;
+                }
+                if (videoInterval) {
+                    clearInterval(videoInterval);
+                    videoInterval = null;
+                }
+                videoContainer.style.display = 'none';
+            }
+        }
+
+        // 清空音频队列
+        function clearAudioQueue() {
+            audioQueue = [];
+            isInterrupted = true;
+            console.log("音频队列已清空");
+        }
+
+        // 处理中断事件
+        function handleInterrupt() {
+            console.log("检测到中断，停止音频播放");
+            clearAudioQueue();
+            
+            // 清除speaking状态
+            voiceOrb.classList.remove("speaking", "preparing-speak");
+            
+            if (isMicEnabled) {
+                voiceOrb.classList.add("listening");
+                updateStatus("正在聆听...", 'active');
+            } else {
+                voiceOrb.classList.add("muted");
+                updateStatus("麦克风已关闭");
+            }
+        }
+
+        // 按顺序播放音频队列中的音频
+        async function playNextAudio() {
+            if (isPlaying || audioQueue.length === 0) {
+                return;
+            }
+
+            // 移除模拟文本插入，真实转录文本将由服务器事件触发
+            
+            isPlaying = true;
+            
+            // 添加准备说话的过渡效果
+            voiceOrb.classList.remove("listening", "muted", "audio-active");
+            voiceOrb.classList.add("preparing-speak");
+            updateStatus("正在准备回复...", 'active');
+            
+            // 短暂延迟后开始说话动画
+            setTimeout(() => {
+                voiceOrb.classList.remove("preparing-speak");
+                voiceOrb.classList.add("speaking");
+                updateStatus("正在播放回复...", 'active');
+            }, 300);
+
+            while (audioQueue.length > 0 && !isInterrupted) {
+                const audioData = audioQueue.shift();
+                try {
+                    await playAudioBuffer(audioData);
+                } catch (error) {
+                    console.error("播放音频时出错:", error);
+                    break;
+                }
+            }
+
+            isPlaying = false;
+            isInterrupted = false;
+
+            // 语音播放结束后，将暂存的 assistant 消息显示出来
+            if (pendingAssistantMessages.length > 0) {
+                pendingAssistantMessages.forEach(msg => addMessageToHistory('assistant', msg));
+                pendingAssistantMessages = [];
+            }
+
+            // AI播放完毕后，不再自动插入模拟回复，回复文本将由服务器事件触发
+            
+            // 清除speaking状态
+            voiceOrb.classList.remove("speaking", "preparing-speak");
+            
+            if (isMicEnabled) {
+                voiceOrb.classList.add("listening");
+                updateStatus("正在聆听...", 'active');
+            } else {
+                voiceOrb.classList.add("muted");
+                updateStatus("麦克风已关闭");
+            }
+        }
+
+        // 播放单个音频缓冲区
+        function playAudioBuffer(buffer) {
+            return new Promise((resolve, reject) => {
+                try {
+                    const int16 = new Int16Array(buffer);
+                    const float32 = new Float32Array(int16.length);
+                    for (let i = 0; i < int16.length; i++) {
+                        float32[i] = int16[i] / 32768;
+                    }
+                    const audioBuffer = audioContext.createBuffer(1, float32.length, 24000);
+                    audioBuffer.copyToChannel(float32, 0);
+                    const source = audioContext.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(audioContext.destination);
+                    
+                    source.onended = () => {
+                        resolve();
+                    };
+                    
+                    source.onerror = () => {
+                        reject(new Error("音频播放失败"));
+                    };
+                    
+                    source.start();
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+
+        // 将音频数据添加到队列并开始播放
+        function enqueueAudio(buffer) {
+            console.log(`接收到音频数据: ${buffer.byteLength} 字节`);
+            audioQueue.push(buffer);
+            playNextAudio();
+        }
+
+        // 初始化 WebSocket 连接
+        function initWebSocket() {
+            // 根据当前协议自动选择WebSocket协议
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            socket = new WebSocket(`${protocol}//${location.host}/ws?voice=${currentVoice}`);
+            socket.binaryType = "arraybuffer";
+            socket.onopen = () => {
+                console.log("WebSocket 已连接");
+                isConnected = true;
+                updateStatus("连接已建立", 'active');
+                reconnectBtn.style.display = "none";
+                startTimer(); // 连接成功后启动计时器
+            };
+            socket.onmessage = (e) => {
+                if (e.data instanceof ArrayBuffer) {
+                    enqueueAudio(e.data);
+                } else if (e.data === "interrupt") {
+                    handleInterrupt();
+                } else if (e.data === "ping") {
+                    // 处理心跳包，发送pong回应
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send("pong");
+                    }
+                    console.log("收到心跳包，已回应");
+                } else {
+                    try {
+                        const eventData = JSON.parse(e.data);
+                        if (eventData.type === 'input_transcript') {
+                            addMessageToHistory('user', eventData.data);
+                            userMessageAdded = true;
+                        } else if (eventData.type === 'output_transcript') {
+                            // 暂存，由语音播放完毕后再显示
+                            pendingAssistantMessages.push(eventData.data);
+                            userMessageAdded = false; // 完成一轮对话
+                        }
+                    } catch(err) {
+                        console.error('解析服务器消息失败:', err);
+                    }
+                }
+            };
+            socket.onclose = () => {
+                console.log("WebSocket 已关闭");
+                isConnected = false;
+                clearAudioQueue();
+                updateStatus("连接已断开，正在重新连接...", 'error');
+                reconnectBtn.style.display = "block";
+                if (timerInterval) clearInterval(timerInterval);
+            };
+            socket.onerror = () => {
+                updateStatus("连接错误，点击重新连接", 'error');
+                reconnectBtn.style.display = "block";
+                if (timerInterval) clearInterval(timerInterval);
+            };
+        }
+
+        // 初始化音频录制
+        async function initAudioRecording() {
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                
+                // 设置音频分析器
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.smoothingTimeConstant = 0.8; // 添加平滑处理
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+                
+                const source = audioContext.createMediaStreamSource(mediaStream);
+                processor = audioContext.createScriptProcessor(4096, 1, 1);
+                
+                source.connect(analyser);
+                source.connect(processor);
+                processor.connect(audioContext.destination);
+                
+                processor.onaudioprocess = (e) => {
+                    if (!isMicEnabled || !isConnected) return;
+                    
+                    const input = e.inputBuffer.getChannelData(0);
+                    const int16 = new Int16Array(input.length);
+                    for (let i = 0; i < input.length; i++) {
+                        const s = Math.max(-1, Math.min(1, input[i]));
+                        int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    }
+                    if (socket.readyState === WebSocket.OPEN) {
+                        const bufferToSend = new Uint8Array(1 + int16.buffer.byteLength);
+                        bufferToSend[0] = 0; // 0 for audio
+                        bufferToSend.set(new Uint8Array(int16.buffer), 1);
+                        socket.send(bufferToSend.buffer);
+                    }
+                };
+                
+                // 开始音频可视化
+                analyzeAudio();
+                
+                // 初始状态设置
+                voiceOrb.classList.remove('muted', 'speaking', 'preparing-speak');
+                voiceOrb.classList.add("listening");
+                updateStatus("正在聆听...", 'active');
+                
+                return true;
+            } catch (error) {
+                console.error("初始化音频录制失败:", error);
+                updateStatus("无法访问麦克风，请检查权限", 'error');
+                return false;
+            }
+        }
+
+        async function initVideo() {
+            try {
+                localVideoStream = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 360, frameRate: 15 } });
+                localVideo.srcObject = localVideoStream;
+                videoContainer.style.display = 'block';
+
+                if (videoInterval) clearInterval(videoInterval);
+                videoInterval = setInterval(sendVideoData, 500); // 2 fps
+
+                isCameraEnabled = true;
+                cameraBtn.classList.add('active');
+                cameraBtn.classList.remove('muted');
+                cameraBtn.title = '摄像头开启';
+            } catch (err) {
+                console.error("摄像头访问被拒绝:", err);
+                updateStatus('需要摄像头权限', 'error');
+                // Allow audio-only
+                isCameraEnabled = false;
+                cameraBtn.classList.remove('active');
+                cameraBtn.classList.add('muted');
+                cameraBtn.title = '摄像头关闭';
+            }
+        }
+
+        function sendVideoData() {
+            if (!localVideoStream || !socket || socket.readyState !== WebSocket.OPEN) return;
+
+            const track = localVideoStream.getVideoTracks()[0];
+            if (!track || !track.readyState === 'live') return;
+
+            if (window.ImageCapture) {
+                 const imageCapture = new ImageCapture(track);
+                 imageCapture.grabFrame()
+                    .then(imageBitmap => {
+                        videoCanvas.width = imageBitmap.width;
+                        videoCanvas.height = imageBitmap.height;
+                        const ctx = videoCanvas.getContext('2d');
+                        ctx.drawImage(imageBitmap, 0, 0);
+                        videoCanvas.toBlob(sendBlob, 'image/jpeg', 0.7);
+                    })
+                    .catch(e => console.error('grabFrame() error:', e));
+            } else {
+                videoCanvas.width = localVideo.videoWidth;
+                videoCanvas.height = localVideo.videoHeight;
+                const ctx = videoCanvas.getContext('2d');
+                ctx.drawImage(localVideo, 0, 0, videoCanvas.width, videoCanvas.height);
+                videoCanvas.toBlob(sendBlob, 'image/jpeg', 0.7);
+            }
+        }
+        
+        async function sendBlob(blob) {
+            if (!blob || !socket || socket.readyState !== WebSocket.OPEN) return;
+            
+            const arrayBuffer = await blob.arrayBuffer();
+            const bufferToSend = new Uint8Array(1 + arrayBuffer.byteLength);
+            bufferToSend[0] = 1; // 1 for video
+            bufferToSend.set(new Uint8Array(arrayBuffer), 1);
+            
+            socket.send(bufferToSend.buffer);
+        }
+
+        // 自动初始化
+        async function autoInit() {
+            updateStatus("正在连接...", 'active');
+            
+            // 设置并禁用当前音色
+            voiceSelect.value = currentVoice;
+            applyTheme(currentVoice); // 应用主题颜色
+
+            Array.from(voiceSelect.options).forEach(option => {
+                option.disabled = (option.value === currentVoice);
+            });
+
+            // 初始化WebSocket连接
+            initWebSocket();
+            
+            // 等待连接建立
+            const connected = await new Promise((resolve) => {
+                const checkConnection = () => {
+                    if (socket.readyState === WebSocket.OPEN) {
+                        resolve(true);
+                    } else if (socket.readyState === WebSocket.CLOSING || socket.readyState === WebSocket.CLOSED) {
+                        resolve(false);
+                    } else {
+                        setTimeout(checkConnection, 100);
+                    }
+                };
+                checkConnection();
+            });
+
+            if (!connected) {
+                return;
+            }
+            
+            // 初始化音频录制
+            const audioInitialized = await initAudioRecording();
+            await initVideo();
+            
+            if (!audioInitialized) {
+                isMicEnabled = false;
+                micBtn.classList.remove('active');
+                micBtn.classList.add('muted');
+                voiceOrb.classList.add('muted');
+            }
+        }
+
+        // 麦克风开关事件
+        micBtn.onclick = () => {
+            toggleMicrophone();
+        };
+
+        // 摄像头开关事件
+        cameraBtn.onclick = () => {
+            toggleCamera();
+        };
+
+        // 重新连接事件
+        reconnectBtn.onclick = () => {
+            location.reload();
+        };
+
+        // 结束通话事件
+        stopBtn.onclick = () => {
+            resetConnection();
+        };
+
+        // 音色选择事件
+        voiceSelect.onchange = () => {
+            const newVoice = voiceSelect.value;
+            localStorage.setItem('voice', newVoice);
+            location.reload();
+        };
+
+        // 页面加载时自动初始化
+        window.addEventListener('load', () => {
+            autoInit();
+            makeDraggable(videoContainer);
+        });
+
+        // 实现拖拽功能
+        function makeDraggable(element) {
+            let isDragging = false;
+            let offsetX, offsetY;
+
+            const onMouseDown = (e) => {
+                isDragging = true;
+                
+                const rect = element.getBoundingClientRect();
+
+                // Set position in pixels and remove transform to avoid jumpiness
+                element.style.transform = 'none';
+                element.style.top = `${rect.top}px`;
+                element.style.left = `${rect.left}px`;
+                element.style.right = 'auto';
+                element.style.bottom = 'auto';
+
+                offsetX = e.clientX - rect.left;
+                offsetY = e.clientY - rect.top;
+
+                element.style.cursor = 'grabbing';
+                element.style.userSelect = 'none';
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp, { once: true });
+            };
+            
+            const onMouseMove = (e) => {
+                if (!isDragging) return;
+
+                let x = e.clientX - offsetX;
+                let y = e.clientY - offsetY;
+
+                // 限制在视口内
+                const maxX = window.innerWidth - element.offsetWidth;
+                const maxY = window.innerHeight - element.offsetHeight;
+
+                x = Math.max(0, Math.min(x, maxX));
+                y = Math.max(0, Math.min(y, maxY));
+                
+                element.style.left = `${x}px`;
+                element.style.top = `${y}px`;
+            };
+
+            const onMouseUp = () => {
+                isDragging = false;
+                document.removeEventListener('mousemove', onMouseMove);
+                element.style.cursor = 'move';
+                element.style.removeProperty('user-select');
+            };
+
+            element.addEventListener('mousedown', onMouseDown);
+        }
+    </script>
+</body>
+</html> 
