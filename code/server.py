@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-DEFAULT_VOICE = "qwen-omni-vc-mm-voice-20260522161248001-f213"
+DEFAULT_VOICE = "qwen-omni-vc-haier-voice-20260602092157508-75dd"
 
 # 重连配置
 MAX_RECONNECT_ATTEMPTS = 5

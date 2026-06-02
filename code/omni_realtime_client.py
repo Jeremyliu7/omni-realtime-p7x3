@@ -12,7 +12,7 @@ class TurnDetectionMode(Enum):
     SERVER_VAD = "server_vad"
     MANUAL = "manual"
 
-DEFAULT_VOICE = "qwen-omni-vc-mm-voice-20260522161248001-f213"
+DEFAULT_VOICE = "qwen-omni-vc-haier-voice-20260602092157508-75dd"
 
 class OmniRealtimeClient:
     """
