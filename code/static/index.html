@@ -1242,7 +1242,7 @@
         // 初始化音频录制
         function updateStyleStatus(data) {
             const styleStatus = document.getElementById('style-status');
-            const label = data.label === 'pressure' ? '施压' : data.label === 'encouraging' ? '鼓励' : '安抚';
+            const label = data.display_label || (data.label === 'pressure' ? '施压' : data.label === 'encouraging' ? '鼓励' : '安抚');
             const reason = data.reason === 'refusal_or_delay' ? '拒绝/拖延/不想还' : data.reason === 'positive' ? '用户愿意' : '中性/安抚';
             styleStatus.textContent = `当前风格：${label}（${reason}）`;
             styleStatus.title = data.instruction;

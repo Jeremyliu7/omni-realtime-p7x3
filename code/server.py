@@ -238,7 +238,8 @@ async def websocket_endpoint(websocket: WebSocket, voice: str = DEFAULT_VOICE):
             await websocket.send_json({
                 "type": "style_update",
                 "data": {
-                    "label": get_style_label(style),
+                    "label": style.get("label", "soothing"),
+                    "display_label": get_style_label(style),
                     "reason": style.get("reason", "normal"),
                     "instruction": instruction
                 }
