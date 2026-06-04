@@ -291,7 +291,7 @@ async def websocket_endpoint(websocket: WebSocket, voice: str = DEFAULT_VOICE):
             logger.error(f"发送输出转录失败: {e}")
             websocket_active = False
 
-    current_style = {"emotion": "neutral", "willingness": "normal"}
+    current_style = {"label": "soothing", "reason": "neutral"}
     last_style_instruction = get_style_instruction(current_style)
 
     try:
