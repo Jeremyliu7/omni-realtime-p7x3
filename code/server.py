@@ -74,62 +74,51 @@ class ReconnectManager:
 
 
 def analyze_user_state(transcript: str) -> dict:
-    """根据用户转录文本判断情绪和意愿。"""
+    """根据用户转录文本判断当前风格：安抚、施压或鼓励。"""
     text = transcript.lower()
-    state = {
-        "emotion": "neutral",
-        "willingness": "normal"
+    style = {
+        "label": "soothing",
+        "reason": "normal"
     }
 
-    if any(keyword in text for keyword in ["生气", "愤怒", "不耐烦", "烦", "烦死", "气死", "恼火", "生气了"]):
-        state["emotion"] = "frustrated"
-    elif any(keyword in text for keyword in ["难过", "伤心", "烦闷", "沮丧"]):
-        state["emotion"] = "sad"
-
-    if any(keyword in text for keyword in ["不想", "没兴趣", "不愿", "拒绝", "不要", "不会", "不会还", "不还"]):
-        state["willingness"] = "reluctant"
-    elif any(keyword in text for keyword in ["稍后", "再说", "晚点", "忙", "现在不", "现在忙", "等会", "过会"]):
-        state["willingness"] = "busy"
+    if any(keyword in text for keyword in [
+        "没钱", "不想还", "不想", "不愿", "拒绝", "不要", "不会还", "不还",
+        "先不", "再说", "晚点", "过会", "等会", "现在不", "现在忙", "拖延", "犹豫", "犹豫不决"
+    ]):
+        style["label"] = "pressure"
+        style["reason"] = "refusal_or_delay"
     elif any(keyword in text for keyword in ["好", "可以", "行", "愿意", "没问题", "可以还", "愿意还"]):
-        state["willingness"] = "willing"
+        style["label"] = "encouraging"
+        style["reason"] = "positive"
+    else:
+        style["label"] = "soothing"
+        style["reason"] = "neutral"
 
-    return state
+    return style
 
 
 def get_style_instruction(state: dict) -> str:
-    """根据情绪和意愿生成附加 prompt。"""
-    if state["willingness"] == "busy":
+    """根据当前风格生成附加 prompt。"""
+    if state["label"] == "pressure":
         return (
-            "请用简短礼貌的语气回应，快速结束本次通话，语速正常或略快，避免继续施压。"
+            "请用更强硬、严厉的语气回应，语速明显加快，语调坚定有力，声音稍大，必要时可称呼客户姓名或适当表达不耐烦，用反问推进对方明确还款态度。"
         )
-    if state["willingness"] == "reluctant":
-        return (
-            "请用更强硬、严厉的语气回应，语速明显加快，语调坚定，措辞直截了当，传达清晰的还款要求，但仍需保持基本专业礼貌。"
-        )
-    if state["emotion"] == "frustrated":
-        return (
-            "请用安抚、温柔的语气回应，语速明显放慢，语调柔和，避免强硬或刺激性语言，优先稳定用户情绪。"
-        )
-    if state["willingness"] == "willing":
+    if state["label"] == "encouraging":
         return (
             "请用积极鼓励的语气回应，语速正常或稍快，语调亲切，肯定用户意愿并引导用户继续结清。"
         )
     return (
-        "请用专业、礼貌的语气回应，语速稳定，语调沉稳，表达清晰规范，遵循当前催收话术。"
+        "请用安抚、温柔的语气回应，语速明显放慢，语调柔和，避免强硬或刺激性语言，优先稳定用户情绪。"
     )
 
 
 def get_style_label(state: dict) -> str:
-    """根据情绪和意愿生成简要风格标签。"""
-    if state["willingness"] == "busy":
-        return "快速结束"
-    if state["willingness"] == "reluctant":
+    """根据当前风格生成简要风格标签。"""
+    if state["label"] == "pressure":
         return "施压"
-    if state["emotion"] == "frustrated":
-        return "安抚"
-    if state["willingness"] == "willing":
+    if state["label"] == "encouraging":
         return "鼓励"
-    return "专业"
+    return "安抚"
 
 
 async def create_and_connect_client(
@@ -249,9 +238,8 @@ async def websocket_endpoint(websocket: WebSocket, voice: str = DEFAULT_VOICE):
             await websocket.send_json({
                 "type": "style_update",
                 "data": {
-                    "emotion": style["emotion"],
-                    "willingness": style["willingness"],
                     "label": get_style_label(style),
+                    "reason": style.get("reason", "normal"),
                     "instruction": instruction
                 }
             })
