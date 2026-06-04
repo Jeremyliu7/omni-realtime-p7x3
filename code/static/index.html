@@ -402,6 +402,24 @@
             /* 使用默认颜色 */
         }
 
+        .style-status {
+            margin-top: 12px;
+            font-size: 14px;
+            color: #495057;
+            background: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(233, 236, 239, 0.8);
+            padding: 10px 16px;
+            border-radius: 18px;
+            backdrop-filter: blur(10px);
+            max-width: 480px;
+            text-align: center;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .style-status span {
+            font-weight: 600;
+        }
+
         /* 计时器显示样式 */
         .timer-display {
             font-size: 16px;
@@ -617,6 +635,7 @@
         </select>
     </div>
     <div class="status-indicator" id="status-indicator">正在初始化...</div>
+    <div class="style-status" id="style-status">当前风格：专业（情绪 中性，意愿 正常）</div>
 
     <div id="video-container" style="display: none;">
         <video id="localVideo" autoplay muted playsinline></video>
@@ -1197,6 +1216,8 @@
                             // 暂存，由语音播放完毕后再显示
                             pendingAssistantMessages.push(eventData.data);
                             userMessageAdded = false; // 完成一轮对话
+                        } else if (eventData.type === 'style_update') {
+                            updateStyleStatus(eventData.data);
                         }
                     } catch(err) {
                         console.error('解析服务器消息失败:', err);
@@ -1219,6 +1240,16 @@
         }
 
         // 初始化音频录制
+        function updateStyleStatus(data) {
+            const styleStatus = document.getElementById('style-status');
+            const label = data.label || '专业';
+            const emotionLabel = data.emotion === 'frustrated' ? '烦躁/愤怒' : data.emotion === 'sad' ? '悲伤' : '中性';
+            const willingnessLabel = data.willingness === 'busy' ? '忙碌/回避' : data.willingness === 'reluctant' ? '犹豫/拒绝' : data.willingness === 'willing' ? '积极/愿意' : '正常';
+            styleStatus.textContent = `当前风格：${label}（情绪 ${emotionLabel}，意愿 ${willingnessLabel}）`;
+            styleStatus.title = data.instruction;
+            styleStatus.style.borderColor = '#adb5bd';
+        }
+
         async function initAudioRecording() {
             try {
                 mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });

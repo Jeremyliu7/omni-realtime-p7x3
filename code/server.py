@@ -72,6 +72,64 @@ class ReconnectManager:
         self.is_reconnecting = False
         logger.info("重连状态已重置")
 
+
+def analyze_user_state(transcript: str) -> dict:
+    """根据用户转录文本判断情绪和意愿。"""
+    text = transcript.lower()
+    state = {
+        "emotion": "neutral",
+        "willingness": "normal"
+    }
+
+    if any(keyword in text for keyword in ["生气", "愤怒", "不耐烦", "烦", "烦死", "气死", "恼火", "生气了"]):
+        state["emotion"] = "frustrated"
+    elif any(keyword in text for keyword in ["难过", "伤心", "烦闷", "沮丧"]):
+        state["emotion"] = "sad"
+
+    if any(keyword in text for keyword in ["不想", "没兴趣", "不愿", "拒绝", "不要", "不会", "不会还", "不还"]):
+        state["willingness"] = "reluctant"
+    elif any(keyword in text for keyword in ["稍后", "再说", "晚点", "忙", "现在不", "现在忙", "等会", "过会"]):
+        state["willingness"] = "busy"
+    elif any(keyword in text for keyword in ["好", "可以", "行", "愿意", "没问题", "可以还", "愿意还"]):
+        state["willingness"] = "willing"
+
+    return state
+
+
+def get_style_instruction(state: dict) -> str:
+    """根据情绪和意愿生成附加 prompt。"""
+    if state["willingness"] == "busy":
+        return (
+            "请用简短礼貌的语气回应，快速结束本次通话，语速正常或略快，避免继续施压。"
+        )
+    if state["willingness"] == "reluctant":
+        return (
+            "请用耐心、委婉的语气回应，语速放慢，减少压力，重点表达理解用户困难，避免强硬催促。"
+        )
+    if state["emotion"] == "frustrated":
+        return (
+            "请用安抚、温柔的语气回应，语速放慢，避免使用强硬词语，优先安抚情绪。"
+        )
+    if state["willingness"] == "willing":
+        return (
+            "请用积极鼓励的语气回应，语速正常或稍快，肯定用户意愿并引导用户继续结清。"
+        )
+    return "请用专业、礼貌、自然的语气回应，语速正常，遵循当前催收话术。"
+
+
+def get_style_label(state: dict) -> str:
+    """根据情绪和意愿生成简要风格标签。"""
+    if state["willingness"] == "busy":
+        return "快速结束"
+    if state["willingness"] == "reluctant":
+        return "耐心"
+    if state["emotion"] == "frustrated":
+        return "安抚"
+    if state["willingness"] == "willing":
+        return "鼓励"
+    return "专业"
+
+
 async def create_and_connect_client(
     api_key: str, 
     on_audio_callback, 
@@ -182,6 +240,37 @@ async def websocket_endpoint(websocket: WebSocket, voice: str = DEFAULT_VOICE):
             websocket_active = False
 
     # -------- 录音转录 & 回复文本回调 --------
+    async def send_style_update(style: dict, instruction: str):
+        if not websocket_active:
+            return
+        try:
+            await websocket.send_json({
+                "type": "style_update",
+                "data": {
+                    "emotion": style["emotion"],
+                    "willingness": style["willingness"],
+                    "label": get_style_label(style),
+                    "instruction": instruction
+                }
+            })
+        except Exception as e:
+            logger.error(f"发送风格更新失败: {e}")
+
+    async def update_response_style(transcript: str):
+        nonlocal current_style, last_style_instruction
+        new_style = analyze_user_state(transcript)
+        new_instruction = get_style_instruction(new_style)
+        if new_instruction != last_style_instruction:
+            current_style = new_style
+            last_style_instruction = new_instruction
+            if client:
+                try:
+                    await client.create_response(additional_instructions=new_instruction)
+                    await send_style_update(new_style, new_instruction)
+                    logger.info(f"已更新对话风格：{new_style}")
+                except Exception as e:
+                    logger.error(f"更新对话风格时出错: {e}")
+
     def on_input_transcript(transcript: str):
         nonlocal websocket_active
         if not websocket_active:
@@ -193,6 +282,7 @@ async def websocket_endpoint(websocket: WebSocket, voice: str = DEFAULT_VOICE):
                 loop
             )
             logger.info(f"发送输入转录: {transcript}")
+            asyncio.run_coroutine_threadsafe(update_response_style(transcript), loop)
         except Exception as e:
             logger.error(f"发送输入转录失败: {e}")
             websocket_active = False
@@ -210,6 +300,9 @@ async def websocket_endpoint(websocket: WebSocket, voice: str = DEFAULT_VOICE):
         except Exception as e:
             logger.error(f"发送输出转录失败: {e}")
             websocket_active = False
+
+    current_style = {"emotion": "neutral", "willingness": "normal"}
+    last_style_instruction = get_style_instruction(current_style)
 
     try:
         while websocket_active:
