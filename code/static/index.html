@@ -635,7 +635,7 @@
         </select>
     </div>
     <div class="status-indicator" id="status-indicator">正在初始化...</div>
-    <div class="style-status" id="style-status">当前风格：安抚（中性）</div>
+    <div class="style-status" id="style-status">当前风格：正常（正常催收）</div>
 
     <div id="video-container" style="display: none;">
         <video id="localVideo" autoplay muted playsinline></video>
@@ -1242,8 +1242,15 @@
         // 初始化音频录制
         function updateStyleStatus(data) {
             const styleStatus = document.getElementById('style-status');
-            const label = data.display_label || (data.label === 'pressure' ? '施压' : data.label === 'encouraging' ? '鼓励' : '安抚');
-            const reason = data.reason === 'refusal_or_delay' ? '拒绝/拖延/不想还' : data.reason === 'positive' ? '用户愿意' : '中性/安抚';
+            const label = data.display_label ||
+                (data.label === 'pressure' ? '施压' :
+                 data.label === 'encouraging' ? '鼓励' :
+                 data.label === 'soothing' ? '安抚' :
+                 '正常');
+            const reason = data.reason === 'refusal_or_delay' ? '拒绝/拖延/不想还' :
+                data.reason === 'positive' ? '用户愿意' :
+                data.reason === 'complaint_or_emotion' ? '投诉/情绪激动' :
+                '正常催收';
             styleStatus.textContent = `当前风格：${label}（${reason}）`;
             styleStatus.title = data.instruction;
             styleStatus.style.borderColor = '#adb5bd';

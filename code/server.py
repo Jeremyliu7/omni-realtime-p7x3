@@ -74,14 +74,20 @@ class ReconnectManager:
 
 
 def analyze_user_state(transcript: str) -> dict:
-    """根据用户转录文本判断当前风格：安抚、施压或鼓励。"""
+    """根据用户转录文本判断当前风格：正常、安抚、施压或鼓励。"""
     text = transcript.lower()
     style = {
-        "label": "soothing",
-        "reason": "normal"
+        "label": "normal",
+        "reason": "neutral"
     }
 
     if any(keyword in text for keyword in [
+        "投诉", "要投诉", "不满", "气愤", "生气", "暴躁", "愤怒", "情绪激动", "激动",
+        "烦", "不耐烦"
+    ]):
+        style["label"] = "soothing"
+        style["reason"] = "complaint_or_emotion"
+    elif any(keyword in text for keyword in [
         "没钱", "不想还", "不想", "不愿", "拒绝", "不要", "不会还", "不还",
         "先不", "再说", "晚点", "过会", "等会", "现在不", "现在忙", "拖延", "犹豫", "犹豫不决"
     ]):
@@ -91,7 +97,7 @@ def analyze_user_state(transcript: str) -> dict:
         style["label"] = "encouraging"
         style["reason"] = "positive"
     else:
-        style["label"] = "soothing"
+        style["label"] = "normal"
         style["reason"] = "neutral"
 
     return style
@@ -107,8 +113,12 @@ def get_style_instruction(state: dict) -> str:
         return (
             "请用积极鼓励的语气回应，语速正常或稍快，语调亲切，肯定用户意愿并引导用户继续结清。"
         )
+    if state["label"] == "soothing":
+        return (
+            "请用安抚、温柔的语气回应，语速明显放慢，语调柔和，避免强硬或刺激性语言，优先稳定用户情绪。"
+        )
     return (
-        "请用安抚、温柔的语气回应，语速明显放慢，语调柔和，避免强硬或刺激性语言，优先稳定用户情绪。"
+        "请用专业、礼貌的语气回应，语速稳定，语调沉稳，表达清晰规范，遵循当前催收话术。"
     )
 
 
@@ -118,7 +128,9 @@ def get_style_label(state: dict) -> str:
         return "施压"
     if state["label"] == "encouraging":
         return "鼓励"
-    return "安抚"
+    if state["label"] == "soothing":
+        return "安抚"
+    return "正常"
 
 
 async def create_and_connect_client(
@@ -238,9 +250,9 @@ async def websocket_endpoint(websocket: WebSocket, voice: str = DEFAULT_VOICE):
             await websocket.send_json({
                 "type": "style_update",
                 "data": {
-                    "label": style.get("label", "soothing"),
+                    "label": style.get("label", "normal"),
                     "display_label": get_style_label(style),
-                    "reason": style.get("reason", "normal"),
+                    "reason": style.get("reason", "neutral"),
                     "instruction": instruction
                 }
             })
@@ -292,7 +304,7 @@ async def websocket_endpoint(websocket: WebSocket, voice: str = DEFAULT_VOICE):
             logger.error(f"发送输出转录失败: {e}")
             websocket_active = False
 
-    current_style = {"label": "soothing", "reason": "neutral"}
+    current_style = {"label": "normal", "reason": "neutral"}
     last_style_instruction = get_style_instruction(current_style)
 
     try:
