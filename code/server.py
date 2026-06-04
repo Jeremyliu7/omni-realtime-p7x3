@@ -104,17 +104,19 @@ def get_style_instruction(state: dict) -> str:
         )
     if state["willingness"] == "reluctant":
         return (
-            "请用耐心、委婉的语气回应，语速放慢，减少压力，重点表达理解用户困难，避免强硬催促。"
+            "请用更强硬、严厉的语气回应，语速明显加快，语调坚定，措辞直截了当，传达清晰的还款要求，但仍需保持基本专业礼貌。"
         )
     if state["emotion"] == "frustrated":
         return (
-            "请用安抚、温柔的语气回应，语速放慢，避免使用强硬词语，优先安抚情绪。"
+            "请用安抚、温柔的语气回应，语速明显放慢，语调柔和，避免强硬或刺激性语言，优先稳定用户情绪。"
         )
     if state["willingness"] == "willing":
         return (
-            "请用积极鼓励的语气回应，语速正常或稍快，肯定用户意愿并引导用户继续结清。"
+            "请用积极鼓励的语气回应，语速正常或稍快，语调亲切，肯定用户意愿并引导用户继续结清。"
         )
-    return "请用专业、礼貌、自然的语气回应，语速正常，遵循当前催收话术。"
+    return (
+        "请用专业、礼貌的语气回应，语速稳定，语调沉稳，表达清晰规范，遵循当前催收话术。"
+    )
 
 
 def get_style_label(state: dict) -> str:
@@ -122,7 +124,7 @@ def get_style_label(state: dict) -> str:
     if state["willingness"] == "busy":
         return "快速结束"
     if state["willingness"] == "reluctant":
-        return "耐心"
+        return "施压"
     if state["emotion"] == "frustrated":
         return "安抚"
     if state["willingness"] == "willing":
