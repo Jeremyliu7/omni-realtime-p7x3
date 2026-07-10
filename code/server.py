@@ -6,7 +6,7 @@ import logging
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-from omni_realtime_client import OmniRealtimeClient, TurnDetectionMode
+from omni_realtime_client import OmniRealtimeClient, TurnDetectionMode, Persona
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -139,7 +139,8 @@ async def create_and_connect_client(
     on_interrupt_callback, 
     on_input_transcript_callback,
     on_output_transcript_callback,
-    voice: str
+    voice: str,
+    persona: Persona = Persona.COLLECTOR
 ) -> OmniRealtimeClient:
     """创建并连接OmniRealtimeClient"""
     client = OmniRealtimeClient(
@@ -147,6 +148,7 @@ async def create_and_connect_client(
         api_key=api_key,
         model="qwen3.5-omni-plus-realtime",
         voice=voice,
+        persona=persona,
         on_audio_delta=lambda d: asyncio.create_task(on_audio_callback(d)),
         on_interrupt=lambda: asyncio.create_task(on_interrupt_callback()),
         on_input_transcript=on_input_transcript_callback,
@@ -155,9 +157,8 @@ async def create_and_connect_client(
     )
     
     await client.connect()
-    # 明确创建一次响应，确保模型按照新的人设指令开始工作
     await client.create_response()
-    logger.info(f"OmniRealtimeClient连接成功, 使用音色: {voice}")
+    logger.info(f"OmniRealtimeClient连接成功, 使用音色: {voice}, 人设: {persona.value}")
     return client
 
 async def stream_video_data_task(client: OmniRealtimeClient, video_queue: asyncio.Queue):
@@ -199,9 +200,14 @@ async def get():
         return HTMLResponse("<h1>服务器错误</h1>", status_code=500)
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, voice: str = DEFAULT_VOICE):
+async def websocket_endpoint(websocket: WebSocket, voice: str = DEFAULT_VOICE, persona: str = "collector"):
     await websocket.accept()
-    logger.info(f"WebSocket连接已建立, 音色: {voice}")
+    
+    persona_enum = Persona.COLLECTOR
+    if persona == "mengjiao":
+        persona_enum = Persona.MENGJIAO
+    
+    logger.info(f"WebSocket连接已建立, 音色: {voice}, 人设: {persona}")
     
     api_key = os.environ.get("DASHSCOPE_API_KEY")
     if not api_key:
@@ -261,6 +267,9 @@ async def websocket_endpoint(websocket: WebSocket, voice: str = DEFAULT_VOICE):
 
     async def update_response_style(transcript: str):
         nonlocal current_style, last_style_instruction
+        if persona_enum == Persona.MENGJIAO:
+            return
+        
         new_style = analyze_user_state(transcript)
         new_instruction = get_style_instruction(new_style)
         if new_instruction != last_style_instruction:
@@ -313,7 +322,7 @@ async def websocket_endpoint(websocket: WebSocket, voice: str = DEFAULT_VOICE):
                 # 1. Create client if it doesn't exist
                 if client is None:
                     logger.info("尝试创建并连接OmniRealtimeClient...")
-                    client = await create_and_connect_client(api_key, on_audio, on_interrupt, on_input_transcript, on_output_transcript, voice)
+                    client = await create_and_connect_client(api_key, on_audio, on_interrupt, on_input_transcript, on_output_transcript, voice, persona_enum)
                     message_task = asyncio.create_task(client.handle_messages())
                     video_sender_task = asyncio.create_task(stream_video_data_task(client, video_queue))
                     reconnect_manager.reset()

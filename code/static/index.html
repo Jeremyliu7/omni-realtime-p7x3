@@ -561,9 +561,29 @@
             align-self: flex-start;
         }
 
-        .voice-selector {
+        .persona-selector {
             position: absolute;
             top: 20px;
+            right: 20px;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(248, 249, 250, 0.3);
+            padding: 8px 16px;
+            border-radius: 20px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            font-size: 14px;
+            font-weight: 500;
+            color: #495057;
+            transition: all 0.3s ease;
+        }
+
+        .voice-selector {
+            position: absolute;
+            top: 65px;
             right: 20px;
             z-index: 10;
             display: flex;
@@ -608,10 +628,16 @@
     <div id="history-container" class="history-container" style="display: none;">
         <div id="history-messages" class="history-messages"></div>
     </div>
-    <div class="voice-selector">
+    <div class="persona-selector">
+        <label for="persona-select">人设:</label>
+        <select id="persona-select">
+            <option value="collector">催收专员</option>
+            <option value="mengjiao">梦角</option>
+        </select>
+    </div>
+    <div class="voice-selector" id="voice-selector-wrapper">
         <label for="voice-select">音色:</label>
         <select id="voice-select">
-            <!-- 新增及更新音色列表 -->
             <option value="qwen-omni-vc-haier-voice-20260602092157508-75dd">催收男声</option>
             <option value="qwen-omni-vc-haier-voice-20260602092250951-0208">催收女声</option>
             <option value="Cherry">芊悦 (Cherry)</option>
@@ -631,7 +657,6 @@
             <option value="Rocky">粤语-阿强 (Rocky)</option>
             <option value="Kiki">粤语-阿清 (Kiki)</option>
             <option value="Eric">四川-程川 (Eric)</option>
-            <!-- 已移除不再支持的 Chelsie、Serena 音色 -->
         </select>
     </div>
     <div class="status-indicator" id="status-indicator">正在初始化...</div>
@@ -695,12 +720,31 @@
         const statusIndicator = document.getElementById("status-indicator");
         const timerDisplay = document.getElementById("timer-display");
         const voiceSelect = document.getElementById("voice-select");
+        const personaSelect = document.getElementById("persona-select");
         const localVideo = document.getElementById('localVideo');
         const videoContainer = document.getElementById('video-container');
         const videoCanvas = document.getElementById('videoCanvas');
         const cameraBtn = document.getElementById('camera-btn');
         const historyContainer = document.getElementById('history-container');
         const historyMessages = document.getElementById('history-messages');
+        const styleStatus = document.getElementById('style-status');
+
+        const personaThemes = {
+            'collector': {
+                name: '催收专员',
+                title: '实时语音通话',
+                orb_gradient: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+                style_label: '当前风格：正常（正常催收）',
+                default_voice: 'qwen-omni-vc-haier-voice-20260602092157508-75dd'
+            },
+            'mengjiao': {
+                name: '梦角',
+                title: '梦角 - 梦幻世界',
+                orb_gradient: 'linear-gradient(135deg, #fce4ec 0%, #f3e5f5 100%)',
+                style_label: '当前风格：梦角（温柔可爱）',
+                default_voice: 'Cherry'
+            }
+        };
 
         const voiceColors = {
             'Ethan': {
@@ -795,7 +839,9 @@
         let timerInterval;
         let timeLeft = 600; // 10分钟
         const DEFAULT_VOICE = 'qwen-omni-vc-mm-voice-20260522161248001-f213';
+        const DEFAULT_PERSONA = 'collector';
         let currentVoice = localStorage.getItem('voice') || DEFAULT_VOICE;
+        let currentPersona = localStorage.getItem('persona') || DEFAULT_PERSONA;
         let userMessageAdded = false; // 添加标志变量，跟踪用户消息是否已添加
         // 用于暂存 assistant 文本，待语音播放完后再显示
         let pendingAssistantMessages = [];
@@ -1186,7 +1232,7 @@
         function initWebSocket() {
             // 根据当前协议自动选择WebSocket协议
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            socket = new WebSocket(`${protocol}//${location.host}/ws?voice=${currentVoice}`);
+            socket = new WebSocket(`${protocol}//${location.host}/ws?voice=${currentVoice}&persona=${currentPersona}`);
             socket.binaryType = "arraybuffer";
             socket.onopen = () => {
                 console.log("WebSocket 已连接");
@@ -1239,9 +1285,10 @@
             };
         }
 
-        // 初始化音频录制
         function updateStyleStatus(data) {
-            const styleStatus = document.getElementById('style-status');
+            if (currentPersona === 'mengjiao') {
+                return;
+            }
             const label = data.display_label ||
                 (data.label === 'pressure' ? '施压' :
                  data.label === 'encouraging' ? '鼓励' :
@@ -1368,19 +1415,41 @@
             socket.send(bufferToSend.buffer);
         }
 
+        function applyPersonaTheme(persona) {
+            const theme = personaThemes[persona];
+            if (!theme) return;
+
+            document.title = theme.title;
+            document.body.style.background = theme.orb_gradient;
+            styleStatus.textContent = theme.style_label;
+            styleStatus.title = '';
+            
+            if (persona === 'mengjiao') {
+                voiceOrb.style.background = '#ffb3ba';
+                voiceOrb.style.borderColor = '#ff8f9a';
+                voiceOrb.style.boxShadow = '0 4px 20px rgba(255, 179, 186, 0.3)';
+            }
+        }
+
         // 自动初始化
         async function autoInit() {
             updateStatus("正在连接...", 'active');
             
-            // 设置并禁用当前音色
+            personaSelect.value = currentPersona;
+            applyPersonaTheme(currentPersona);
+            
+            const theme = personaThemes[currentPersona];
+            if (theme && !voiceSelect.value) {
+                currentVoice = theme.default_voice;
+            }
+            
             voiceSelect.value = currentVoice;
-            applyTheme(currentVoice); // 应用主题颜色
+            applyTheme(currentVoice);
 
             Array.from(voiceSelect.options).forEach(option => {
                 option.disabled = (option.value === currentVoice);
             });
 
-            // 初始化WebSocket连接
             initWebSocket();
             
             // 等待连接建立
@@ -1445,6 +1514,18 @@
         voiceSelect.onchange = () => {
             const newVoice = voiceSelect.value;
             localStorage.setItem('voice', newVoice);
+            location.reload();
+        };
+
+        // 人设选择事件
+        personaSelect.onchange = () => {
+            const newPersona = personaSelect.value;
+            localStorage.setItem('persona', newPersona);
+            
+            const theme = personaThemes[newPersona];
+            if (theme) {
+                localStorage.setItem('voice', theme.default_voice);
+            }
             location.reload();
         };
 
